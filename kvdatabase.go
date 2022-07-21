@@ -19,7 +19,7 @@ type KVDatabase[K comparable, V any] interface {
 	Persist() error
 }
 
-func NewKVDatabase[K comparable, V any](filepath string) (KVDatabase[K, V], error) {
+func New[K comparable, V any](filepath string) (KVDatabase[K, V], error) {
 	file, openErr := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0666)
 	if openErr != nil {
 		panic(openErr)
