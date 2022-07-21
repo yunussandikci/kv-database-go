@@ -6,71 +6,73 @@ import (
 	"os"
 )
 
-type KVDatabase[T any] interface {
-	Read() error
-	Get() (*map[string]T, error)
-	GetByKey(key string) T
-	Set(key string, value T)
-	Persist() error
-}
-
-type kvDatabase[T any] struct {
-	cache *map[string]T
+type kvDatabase[K comparable, V any] struct {
+	cache *map[K]V
 	file  *os.File
 }
 
-func NewKVDatabase[T any](filepath string) (*kvDatabase[T], error) {
-	file, openErr := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0666)
-	if openErr != nil {
-		return nil, openErr
-	}
-	localKVStorage := &kvDatabase[T]{
-		file: file,
-	}
-	readErr := localKVStorage.Read()
-	if readErr != nil {
-		return nil, readErr
-	}
-	return localKVStorage, nil
+type KVDatabase[K comparable, V any] interface {
+	Get(key K) (V, bool)
+	Set(key K, value V)
+	Read()
+	Flush()
+	Persist()
 }
 
-func (l *kvDatabase[T]) Read() error {
+func NewKVDatabase[K comparable, V any](filepath string) KVDatabase[K, V] {
+	file, openErr := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0666)
+	if openErr != nil {
+		panic(openErr)
+	}
+	localKVStorage := &kvDatabase[K, V]{
+		file: file,
+	}
+	localKVStorage.Read()
+	return localKVStorage
+}
+
+func (l *kvDatabase[K, V]) Get(key K) (V, bool) {
+	value, exist := (*l.cache)[key]
+	return value, exist
+}
+
+func (l *kvDatabase[K, V]) Set(key K, value V) {
+	(*l.cache)[key] = value
+}
+
+func (l *kvDatabase[K, V]) Read() {
 	fileContent, readErr := ioutil.ReadAll(l.file)
 	if readErr != nil {
-		return readErr
+		panic(readErr)
 	}
 	if len(fileContent) == 0 {
 		fileContent = []byte("{}")
 	}
-	var data map[string]T
+	var data map[K]V
 	unmarshallErr := json.Unmarshal(fileContent, &data)
 	if unmarshallErr != nil {
-		return unmarshallErr
+		panic(unmarshallErr)
 	}
 	l.cache = &data
-	return nil
 }
 
-func (l *kvDatabase[T]) Get() (*map[string]T, error) {
-	return l.cache, nil
-}
-
-func (l *kvDatabase[T]) GetByKey(key string) T {
-	return (*l.cache)[key]
-}
-
-func (l *kvDatabase[T]) Set(key string, value T) {
-	(*l.cache)[key] = value
-}
-
-func (l *kvDatabase[T]) Persist() error {
+func (l *kvDatabase[K, V]) Persist() {
 	data, marshallErr := json.Marshal(l.cache)
 	if marshallErr != nil {
-		return marshallErr
+		panic(marshallErr)
+	}
+	if truncateErr := l.file.Truncate(0); truncateErr != nil {
+		panic(truncateErr)
+	}
+	if _, seekErr := l.file.Seek(0, 0); seekErr != nil {
+		panic(seekErr)
 	}
 	_, writeErr := l.file.Write(data)
 	if writeErr != nil {
-		return writeErr
+		panic(writeErr)
 	}
-	return nil
+}
+
+func (l *kvDatabase[K, V]) Flush() {
+	*l.cache = make(map[K]V)
 }

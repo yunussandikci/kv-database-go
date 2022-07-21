@@ -3,15 +3,11 @@ package main
 import "fmt"
 
 func main() {
-	database, databaseErr := NewKVDatabase[string]("myfile.json")
-	if databaseErr != nil {
-		panic(databaseErr)
-	}
+	database := NewKVDatabase[int, string]("myfile.json")
 
-	database.Set("key", "value")
-	if persisErr := database.Persist(); persisErr != nil {
-		panic(persisErr)
-	}
+	database.Set(10, "value")
+	database.Persist()
 
-	fmt.Println(database.GetByKey("key"))
+	value, exist := database.Get(10)
+	fmt.Println("value:", value, "exist:", exist)
 }
