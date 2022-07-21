@@ -1,14 +1,14 @@
 package kvdatabase
 
 import (
-	"encoding/json"
-	"io/ioutil"
+	"encoding/gob"
 	"os"
 )
 
 type kvDatabase[K comparable, V any] struct {
-	cache *map[K]V
-	file  *os.File
+	cache   *map[K]V
+	decoder *gob.Decoder
+	encoder *gob.Encoder
 }
 
 type KVDatabase[K comparable, V any] interface {
@@ -25,7 +25,9 @@ func New[K comparable, V any](filepath string) (KVDatabase[K, V], error) {
 		panic(openErr)
 	}
 	instance := &kvDatabase[K, V]{
-		file: file,
+		decoder: gob.NewDecoder(file),
+		encoder: gob.NewEncoder(file),
+		cache:   &map[K]V{},
 	}
 	if readErr := instance.Read(); readErr != nil {
 		return nil, readErr
@@ -43,35 +45,14 @@ func (l *kvDatabase[K, V]) Set(key K, value V) {
 }
 
 func (l *kvDatabase[K, V]) Read() error {
-	fileContent, readErr := ioutil.ReadAll(l.file)
-	if readErr != nil {
-		return readErr
+	if decodeErr := l.decoder.Decode(&l.cache); decodeErr != nil && decodeErr.Error() != "EOF" {
+		return decodeErr
 	}
-	if len(fileContent) == 0 {
-		fileContent = []byte("{}")
-	}
-	var data map[K]V
-	unmarshallErr := json.Unmarshal(fileContent, &data)
-	if unmarshallErr != nil {
-		return unmarshallErr
-	}
-	l.cache = &data
 	return nil
 }
 
 func (l *kvDatabase[K, V]) Persist() error {
-	data, marshallErr := json.Marshal(l.cache)
-	if marshallErr != nil {
-		return marshallErr
-	}
-	if truncateErr := l.file.Truncate(0); truncateErr != nil {
-		return truncateErr
-	}
-	if _, seekErr := l.file.Seek(0, 0); seekErr != nil {
-		return seekErr
-	}
-	_, writeErr := l.file.Write(data)
-	return writeErr
+	return l.encoder.Encode(l.cache)
 }
 
 func (l *kvDatabase[K, V]) Flush() {
