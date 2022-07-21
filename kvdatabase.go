@@ -7,6 +7,7 @@ import (
 
 type kvDatabase[K comparable, V any] struct {
 	cache   *map[K]V
+	file    *os.File
 	decoder *gob.Decoder
 	encoder *gob.Encoder
 }
@@ -25,6 +26,7 @@ func New[K comparable, V any](filepath string) (KVDatabase[K, V], error) {
 		panic(openErr)
 	}
 	instance := &kvDatabase[K, V]{
+		file:    file,
 		decoder: gob.NewDecoder(file),
 		encoder: gob.NewEncoder(file),
 		cache:   &map[K]V{},
@@ -52,6 +54,12 @@ func (l *kvDatabase[K, V]) Read() error {
 }
 
 func (l *kvDatabase[K, V]) Persist() error {
+	if truncateErr := l.file.Truncate(0); truncateErr != nil {
+		return truncateErr
+	}
+	if _, seekErr := l.file.Seek(0, 0); seekErr != nil {
+		return seekErr
+	}
 	return l.encoder.Encode(l.cache)
 }
 
